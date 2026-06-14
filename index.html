@@ -540,7 +540,7 @@
                 return;
             }
 
-            // --- 新功能：當月人員統計儀表板 ---
+            // --- 新功能：前端查詢儀表板 (修正統計邏輯，依製令取最大貼合數) ---
             if (summaryCard) {
                 const now = new Date();
                 const currentMonth = now.getMonth();
@@ -549,7 +549,6 @@
                 // 1. 篩選當月資料
                 const monthRecords = records.filter(rec => {
                     const d = new Date(rec.timestamp);
-                    // 確保日期解析成功再比對
                     if(isNaN(d.getTime())) return false; 
                     return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
                 });
@@ -563,16 +562,31 @@
                 if (monthRecords.length === 0) {
                      opContainer.innerHTML = '<div class="text-center text-xs text-slate-400 py-4">本月目前尚無資料</div>';
                 } else {
-                    // 2. 將當月資料依照 OP 人員分組累加
-                    const opStats = {};
+                    // 2. 先依「人員 + 製令單號」分組，貼合總數取最大值，不良數累加
+                    const woStats = {};
                     monthRecords.forEach(rec => {
                         const op = rec.opName;
-                        if (!opStats[op]) opStats[op] = { total: 0, defect: 0 };
-                        opStats[op].total += parseInt(rec.totalQty) || 0;
-                        opStats[op].defect += parseInt(rec.defectQty) || 0;
+                        const wo = rec.workOrder || '未知製令';
+                        const key = op + '_' + wo;
+
+                        if (!woStats[key]) {
+                            woStats[key] = { op: op, total: 0, defect: 0 };
+                        }
+                        // 同一製令貼合數只取最大值 (不重複加總)
+                        woStats[key].total = Math.max(woStats[key].total, parseInt(rec.totalQty) || 0);
+                        woStats[key].defect += parseInt(rec.defectQty) || 0;
                     });
 
-                    // 3. 計算各自的不良率並轉為陣列
+                    // 3. 再將同一個人的所有製令資料加總
+                    const opStats = {};
+                    Object.values(woStats).forEach(stat => {
+                        const op = stat.op;
+                        if (!opStats[op]) opStats[op] = { total: 0, defect: 0 };
+                        opStats[op].total += stat.total;
+                        opStats[op].defect += stat.defect;
+                    });
+
+                    // 4. 計算各自的不良率並轉為陣列
                     const opArray = Object.keys(opStats).map(op => {
                         const total = opStats[op].total;
                         const defect = opStats[op].defect;
@@ -580,10 +594,10 @@
                         return { op, total, defect, rate };
                     });
 
-                    // 4. 依照不良率由高到低降冪排序
+                    // 5. 依照不良率由高到低降冪排序
                     opArray.sort((a, b) => b.rate - a.rate);
 
-                    // 5. 渲染各人員的卡片列
+                    // 6. 渲染各人員的卡片列
                     opArray.forEach(stat => {
                         let rateColor = 'text-emerald-600';
                         let rateWeight = 'font-semibold';
