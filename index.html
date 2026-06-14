@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCA/OCR Bonding 紀錄系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 自定義隱藏捲軸但可滾動 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* 載入動畫 */
+        .spinner {
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 3px solid #ffffff;
+            width: 20px; height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        .spinner-blue {
+            border: 3px solid rgba(59, 130, 246, 0.3);
+            border-top: 3px solid #3b82f6;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen pb-20">
+
+    <!-- 頂部標題與頁籤 -->
+    <div class="bg-blue-600 text-white shadow-md sticky top-0 z-50">
+        <div class="px-4 py-4 flex justify-between items-center">
+            <h1 class="text-xl font-bold tracking-wider">Bonding 不良率統計</h1>
+        </div>
+        <div class="flex flex-row text-center font-medium">
+            <button onclick="switchTab('form')" id="tab-form" class="flex-1 py-3 border-b-4 border-white bg-blue-700 transition-colors">
+                📝 新增紀錄
+            </button>
+            <button onclick="switchTab('query')" id="tab-query" class="flex-1 py-3 border-b-4 border-transparent hover:bg-blue-700 transition-colors text-blue-100">
+                🔍 查詢紀錄
+            </button>
+        </div>
+    </div>
+
+    <!-- 主內容區 -->
+    <main class="p-4 max-w-md mx-auto">
+
+        <!-- 區塊一：表單紀錄 -->
+        <div id="section-form" class="space-y-4 fade-in">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100">
+                <form id="recordForm" onsubmit="submitForm(event)" class="space-y-4">
+                    
+                    <!-- OP人員選單 -->
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">人員代號 <span class="text-red-500">*</span></label>
+                        <select id="opSelect" required class="w-full px-4 py-3 rounded-lg bg-slate-50 border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all appearance-none" onchange="handleOpSelectChange()">
+                            <!-- 選項將由 JavaScript 動態生成 -->
+                        </select>
+                        
+                        <!-- 新增人員輸入區塊 -->
+                        <div id="newOpContainer" class="hidden mt-2 flex gap-2 items-center">
+                            <input type="text" id="newOpInput" placeholder="輸入新人員代號 (例: K)" class="flex-1 px-4 py-3 rounded-lg bg-white border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all">
+                            <button type="button" onclick="addNewOp()" class="px-4 py-3 bg-blue-100 text-blue-700 font-semibold rounded-lg hover:bg-blue-200 transition-colors">確認</button>
+                            <button type="button" onclick="cancelNewOp()" class="px-4 py-3 bg-slate-100 text-slate-600 font-semibold rounded-lg hover:bg-slate-200 transition-colors">取消</button>
+                        </div>
+                    </div>
+
+                    <!-- 作業名稱 -->
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">作業名稱 <span class="text-red-500">*</span></label>
+                        <select id="operationName" required onchange="handleOperationChange()"
+                            class="w-full px-4 py-3 rounded-lg bg-slate-50 border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all appearance-none">
+                            <option value="" disabled selected>請選擇作業階段...</option>
+                            <optgroup label="OCA Bonding">
+                                <option value="OCA貼合(前段)">OCA貼合 (前段)</option>
+                                <option value="Panel貼合(後段)">Panel貼合 (後段)</option>
+                            </optgroup>
+                            <optgroup label="OCR Bonding">
+                                <option value="OCR Bonding">OCR Bonding</option>
+                            </optgroup>
+                        </select>
+                    </div>
+
+                    <!-- 製令單號 & 總成品號 -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">製令單號 <span class="text-red-500">*</span></label>
+                            <input type="text" id="workOrder" required placeholder="輸入單號" 
+                                class="w-full px-4 py-3 rounded-lg bg-slate-50 border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">總成品號 <span class="text-red-500">*</span></label>
+                            <input type="text" id="productNum" required placeholder="輸入成品號" 
+                                class="w-full px-4 py-3 rounded-lg bg-slate-50 border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all">
+                        </div>
+                    </div>
+
+                    <!-- 尺寸 & 貼合數量 -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">尺寸 <span class="text-red-500">*</span></label>
+                            <input type="text" id="size" required placeholder="例: 7吋" 
+                                class="w-full px-4 py-3 rounded-lg bg-slate-50 border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">貼合數量(總數) <span class="text-red-500">*</span></label>
+                            <input type="number" id="totalQty" required min="1" placeholder="輸入總貼合數" 
+                                class="w-full px-4 py-3 rounded-lg bg-blue-50 border border-blue-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all">
+                        </div>
+                    </div>
+
+                    <!-- 動態不良原因與數量 -->
+                    <div class="p-3 bg-red-50 rounded-xl border border-red-100 space-y-3">
+                        <div class="flex justify-between items-end">
+                            <label class="block text-sm font-semibold text-slate-700">不良項目登記 <span class="text-red-500 text-xs font-normal">(若全數良品請留空)</span></label>
+                            <div class="text-sm font-medium text-slate-600">
+                                總不良數: <span id="displayDefectTotal" class="text-red-600 font-bold text-lg">0</span>
+                            </div>
+                        </div>
+                        
+                        <!-- 動態連動式選單容器 -->
+                        <div id="defectContainer" class="space-y-2"></div>
+                        
+                        <button type="button" onclick="addDefectRow()" class="w-full py-2 border-2 border-dashed border-red-200 text-red-500 rounded-lg font-medium hover:bg-red-50 hover:border-red-300 transition-colors flex justify-center items-center gap-1">
+                            <span>➕ 新增不良項目</span>
+                        </button>
+                    </div>
+
+                    <!-- 備註 -->
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">備註</label>
+                        <textarea id="remarks" rows="2" placeholder="其他補充說明 (選填)" 
+                            class="w-full px-4 py-3 rounded-lg bg-slate-50 border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all"></textarea>
+                    </div>
+
+                    <!-- 提交按鈕 -->
+                    <button type="submit" id="submitBtn" class="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 active:scale-95">
+                        <span id="submitText">送出紀錄</span>
+                        <div id="submitSpinner" class="spinner hidden"></div>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- 區塊二：查詢紀錄 -->
+        <div id="section-query" class="hidden space-y-4">
+            <div class="flex gap-2 mb-4">
+                <input type="text" id="searchInput" placeholder="搜尋 OP 姓名、單號或不良原因..." 
+                    class="flex-1 px-4 py-3 rounded-xl shadow-sm border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none">
+                <button onclick="fetchRecords()" class="bg-blue-100 text-blue-700 px-4 py-3 rounded-xl shadow-sm hover:bg-blue-200 transition-colors font-semibold">
+                    重新整理
+                </button>
+            </div>
+
+            <!-- 全新：各人員當月統計儀表板 -->
+            <div id="summaryCard" class="hidden bg-indigo-50 border border-indigo-100 rounded-xl p-4 mb-2 shadow-sm transition-all">
+                <div class="text-sm text-indigo-800 font-semibold mb-3 flex items-center justify-between">
+                    <span id="summaryMonthTitle">📊 本月人員不良率統計</span>
+                    <span id="summaryCount" class="text-xs bg-indigo-200 text-indigo-800 px-2 py-0.5 rounded-full font-medium">共 0 筆</span>
+                </div>
+                
+                <!-- 列表標題 -->
+                <div class="grid grid-cols-3 text-xs text-indigo-400 font-semibold px-2 mb-2 text-center">
+                    <div class="text-left">人員代號</div>
+                    <div>貼合 / 不良數</div>
+                    <div class="text-right">不良率</div>
+                </div>
+                
+                <!-- 各人員統計動態生成區塊 -->
+                <div id="opSummaryContainer" class="space-y-2">
+                    <!-- 內容由 JS 生成 -->
+                </div>
+            </div>
+
+            <div id="loadingRecords" class="hidden py-10 flex flex-col items-center justify-center text-slate-500">
+                <div class="spinner spinner-blue mb-3"></div>
+                <p>正在載入紀錄，請稍候...</p>
+            </div>
+
+            <div id="recordsContainer" class="space-y-3 pb-6">
+                <div class="text-center py-10 text-slate-500 bg-white rounded-xl shadow-sm border border-slate-100">
+                    點擊上方「重新整理」載入最新資料
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- 自定義訊息提示框 (Toast) -->
+    <div id="toast" class="fixed bottom-5 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full text-white font-medium text-sm shadow-lg transition-all duration-300 opacity-0 pointer-events-none z-50 flex items-center gap-2">
+        <span id="toastIcon"></span>
+        <span id="toastMsg"></span>
+    </div>
+
+    <!-- 腳本邏輯開始 -->
+    <script>
+        // ==========================================
+        // ⚠️ 請在這裡貼上您的 Google Apps Script 網址
+        // ==========================================
+        const GAS_URL = 'https://script.google.com/macros/s/AKfycbyjHs7UlMj3fbTtoGy-urdeYK5L3nkCk_UqbU6uzHRl7S-zbdljNYdEFAy9lolwPlk/exec'; 
+
+        let allRecords = [];
+
+        // --- OP 人員選單邏輯 ---
+        const defaultOps = ['S', 'W', 'J', 'U', 'N', 'A', 'X', 'D', 'V'];
+        const OP_STORAGE_KEY = 'custom_op_list';
+
+        function getOpList() {
+            const customOps = JSON.parse(localStorage.getItem(OP_STORAGE_KEY) || '[]');
+            return [...new Set([...defaultOps, ...customOps])]; 
+        }
+
+        function renderOpSelect() {
+            const select = document.getElementById('opSelect');
+            const ops = getOpList();
+            const currentVal = select.value;
+
+            let html = '<option value="" disabled selected>請選擇作業員代號...</option>';
+            ops.forEach(op => {
+                html += `<option value="${op}">${op}</option>`;
+            });
+            html += '<option value="ADD_NEW" class="font-bold text-blue-600">➕ 新增人員...</option>';
+            select.innerHTML = html;
+
+            if (currentVal && ops.includes(currentVal)) {
+                select.value = currentVal;
+            }
+        }
+
+        function handleOpSelectChange() {
+            const select = document.getElementById('opSelect');
+            const container = document.getElementById('newOpContainer');
+            if (select.value === 'ADD_NEW') {
+                container.classList.remove('hidden');
+                document.getElementById('newOpInput').focus();
+            } else {
+                container.classList.add('hidden');
+            }
+        }
+
+        function addNewOp() {
+            const input = document.getElementById('newOpInput');
+            const newOp = input.value.trim().toUpperCase();
+            
+            if (!newOp) {
+                showToast('請輸入人員代號', 'error');
+                return;
+            }
+
+            const customOps = JSON.parse(localStorage.getItem(OP_STORAGE_KEY) || '[]');
+            if (!defaultOps.includes(newOp) && !customOps.includes(newOp)) {
+                customOps.push(newOp);
+                localStorage.setItem(OP_STORAGE_KEY, JSON.stringify(customOps));
+            }
+
+            renderOpSelect();
+            document.getElementById('opSelect').value = newOp;
+            document.getElementById('newOpContainer').classList.add('hidden');
+            input.value = '';
+            showToast('已新增人員代號：' + newOp);
+        }
+
+        function cancelNewOp() {
+            document.getElementById('newOpContainer').classList.add('hidden');
+            document.getElementById('newOpInput').value = '';
+            document.getElementById('opSelect').value = ''; 
+        }
+
+        // --- 動態不良原因處理 (選單連動) ---
+        const defectReasonsMap = {
+            'OCA貼合(前段)': ['異物', '貼歪', '氣泡'],
+            'Panel貼合(後段)': ['異物', '貼歪', '破片'],
+            'OCR Bonding': ['Touch撞傷', 'Panel撞傷', '異物進入', '割傷', '氣泡']
+        };
+
+        function handleOperationChange() {
+            const container = document.getElementById('defectContainer');
+            container.innerHTML = ''; 
+            calculateDefectTotal();   
+            addDefectRow();           
+        }
+
+        function calculateDefectTotal() {
+            let total = 0;
+            document.querySelectorAll('.defect-count').forEach(input => {
+                const val = parseInt(input.value);
+                if (!isNaN(val) && val > 0) total += val;
+            });
+            document.getElementById('displayDefectTotal').textContent = total;
+        }
+
+        function addDefectRow() {
+            const opName = document.getElementById('operationName').value;
+            const container = document.getElementById('defectContainer');
+            const row = document.createElement('div');
+            row.className = 'flex gap-2 items-center defect-row';
+            
+            let optionsHtml = '<option value="" disabled selected>請選擇不良原因</option>';
+            if (opName && defectReasonsMap[opName]) {
+                defectReasonsMap[opName].forEach(reason => {
+                    optionsHtml += `<option value="${reason}">${reason}</option>`;
+                });
+            } else {
+                optionsHtml = '<option value="" disabled selected>請先選擇作業名稱</option>';
+            }
+
+            row.innerHTML = `
+                <select class="defect-name flex-1 px-3 py-2 rounded-lg bg-white border border-slate-200 focus:border-red-400 focus:ring-2 focus:ring-red-100 outline-none transition-all appearance-none">
+                    ${optionsHtml}
+                </select>
+                <input type="number" min="1" class="defect-count w-24 px-3 py-2 rounded-lg bg-white border border-slate-200 focus:border-red-400 focus:ring-2 focus:ring-red-100 outline-none transition-all" placeholder="數量" oninput="calculateDefectTotal()">
+                <button type="button" onclick="removeDefectRow(this)" class="text-slate-400 hover:text-red-500 p-2 transition-colors" title="刪除此列">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                </button>
+            `;
+            container.appendChild(row);
+        }
+
+        function removeDefectRow(btn) {
+            btn.closest('.defect-row').remove();
+            calculateDefectTotal();
+        }
+
+        // --- 初始化載入 ---
+        window.addEventListener('DOMContentLoaded', () => {
+            renderOpSelect();
+            addDefectRow(); 
+        });
+
+        // --- 頁籤與介面切換邏輯 ---
+        function switchTab(tab) {
+            const formTab = document.getElementById('tab-form');
+            const queryTab = document.getElementById('tab-query');
+            const formSec = document.getElementById('section-form');
+            const querySec = document.getElementById('section-query');
+
+            if (tab === 'form') {
+                formTab.classList.replace('border-transparent', 'border-white');
+                formTab.classList.replace('text-blue-100', 'text-white');
+                formTab.classList.add('bg-blue-700');
+                
+                queryTab.classList.replace('border-white', 'border-transparent');
+                queryTab.classList.replace('text-white', 'text-blue-100');
+                queryTab.classList.remove('bg-blue-700');
+
+                formSec.classList.remove('hidden');
+                querySec.classList.add('hidden');
+            } else {
+                queryTab.classList.replace('border-transparent', 'border-white');
+                queryTab.classList.replace('text-blue-100', 'text-white');
+                queryTab.classList.add('bg-blue-700');
+                
+                formTab.classList.replace('border-white', 'border-transparent');
+                formTab.classList.replace('text-white', 'text-blue-100');
+                formTab.classList.remove('bg-blue-700');
+
+                querySec.classList.remove('hidden');
+                formSec.classList.add('hidden');
+                
+                if (allRecords.length === 0) fetchRecords();
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toastMsg');
+            const toastIcon = document.getElementById('toastIcon');
+            
+            toast.className = `fixed bottom-5 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full text-white font-medium text-sm shadow-xl transition-all duration-300 z-50 flex items-center gap-2`;
+            
+            if (type === 'success') {
+                toast.classList.add('bg-emerald-500');
+                toastIcon.innerHTML = '✓';
+            } else if (type === 'error') {
+                toast.classList.add('bg-rose-500');
+                toastIcon.innerHTML = '⚠';
+            }
+
+            toastMsg.textContent = message;
+            toast.classList.remove('opacity-0', 'translate-y-4');
+            toast.classList.add('opacity-100', 'translate-y-0');
+
+            setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', 'translate-y-4');
+            }, 3000);
+        }
+
+        // --- 提交與查詢資料 ---
+        async function submitForm(e) {
+            e.preventDefault();
+
+            if (GAS_URL.includes('請替換為您的')) {
+                showToast('尚未設定 Google Apps Script 網址！', 'error');
+                return;
+            }
+
+            const opSelectValue = document.getElementById('opSelect').value;
+            if (!opSelectValue || opSelectValue === 'ADD_NEW') {
+                showToast('請選擇或新增有效的 OP 人員代號', 'error');
+                return;
+            }
+
+            const totalQty = parseInt(document.getElementById('totalQty').value);
+            
+            let calculatedDefectQty = 0;
+            let reasonItems = [];
+            let hasError = false;
+            
+            const defectRows = document.querySelectorAll('.defect-row');
+            defectRows.forEach(row => {
+                const name = row.querySelector('.defect-name').value;
+                const count = parseInt(row.querySelector('.defect-count').value);
+                
+                if (name || !isNaN(count)) { 
+                    if (!name) {
+                        showToast('請選擇不良原因', 'error');
+                        hasError = true;
+                    } else if (isNaN(count) || count < 1) {
+                        showToast(`請輸入【${name}】的有效數量`, 'error');
+                        hasError = true;
+                    } else {
+                        calculatedDefectQty += count;
+                        reasonItems.push(`${name}(${count})`);
+                    }
+                }
+            });
+
+            if (hasError) return; 
+
+            const defectQty = calculatedDefectQty;
+            const finalDefectReason = reasonItems.length > 0 ? reasonItems.join('、') : '無';
+
+            if (defectQty > totalQty) {
+                showToast(`不良總數(${defectQty}) 不可大於貼合總數(${totalQty})！`, 'error');
+                return;
+            }
+
+            let defectRateStr = '0.00%';
+            if (totalQty > 0) {
+                defectRateStr = ((defectQty / totalQty) * 100).toFixed(2) + '%';
+            }
+
+            const btn = document.getElementById('submitBtn');
+            const btnText = document.getElementById('submitText');
+            const spinner = document.getElementById('submitSpinner');
+
+            const payload = {
+                action: 'add',
+                data: {
+                    opName: opSelectValue,
+                    operationName: document.getElementById('operationName').value,
+                    workOrder: document.getElementById('workOrder').value.trim(),
+                    productNum: document.getElementById('productNum').value.trim(),
+                    size: document.getElementById('size').value.trim(),
+                    totalQty: totalQty,
+                    defectQty: defectQty,
+                    defectRate: defectRateStr,
+                    defectReason: finalDefectReason,
+                    remarks: document.getElementById('remarks').value.trim()
+                }
+            };
+
+            btn.disabled = true;
+            btn.classList.add('opacity-75', 'cursor-not-allowed');
+            btnText.textContent = '儲存中...';
+            spinner.classList.remove('hidden');
+
+            try {
+                const response = await fetch(GAS_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    showToast('紀錄新增成功！');
+                    document.getElementById('recordForm').reset();
+                    handleOperationChange();
+                    allRecords = []; 
+                } else {
+                    showToast('發生錯誤：' + result.message, 'error');
+                }
+            } catch (error) {
+                showToast('連線失敗，請檢查網路或網址設定', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('opacity-75', 'cursor-not-allowed');
+                btnText.textContent = '送出紀錄';
+                spinner.classList.add('hidden');
+            }
+        }
+
+        async function fetchRecords() {
+            if (GAS_URL.includes('請替換為您的')) {
+                showToast('尚未設定 Google Apps Script 網址！', 'error');
+                return;
+            }
+
+            const container = document.getElementById('recordsContainer');
+            const loader = document.getElementById('loadingRecords');
+            
+            container.innerHTML = '';
+            document.getElementById('summaryCard').classList.add('hidden');
+            loader.classList.remove('hidden');
+
+            try {
+                const response = await fetch(GAS_URL + '?action=getRecords');
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    allRecords = result.data.reverse(); 
+                    renderRecords(allRecords);
+                } else {
+                    showToast('讀取失敗', 'error');
+                }
+            } catch (error) {
+                showToast('讀取失敗，請檢查網路連線', 'error');
+            } finally {
+                loader.classList.add('hidden');
+            }
+        }
+
+        function renderRecords(records) {
+            const container = document.getElementById('recordsContainer');
+            const summaryCard = document.getElementById('summaryCard');
+            container.innerHTML = '';
+
+            if (records.length === 0) {
+                if (summaryCard) summaryCard.classList.add('hidden');
+                container.innerHTML = `
+                    <div class="text-center py-10 text-slate-500 bg-white rounded-xl shadow-sm border border-slate-100">
+                        目前尚無任何紀錄
+                    </div>`;
+                return;
+            }
+
+            // --- 新功能：當月人員統計儀表板 ---
+            if (summaryCard) {
+                const now = new Date();
+                const currentMonth = now.getMonth();
+                const currentYear = now.getFullYear();
+
+                // 1. 篩選當月資料
+                const monthRecords = records.filter(rec => {
+                    const d = new Date(rec.timestamp);
+                    // 確保日期解析成功再比對
+                    if(isNaN(d.getTime())) return false; 
+                    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+                });
+
+                document.getElementById('summaryMonthTitle').textContent = `📊 ${currentMonth + 1}月 各人員不良率統計`;
+                document.getElementById('summaryCount').textContent = `本月共 ${monthRecords.length} 筆`;
+
+                const opContainer = document.getElementById('opSummaryContainer');
+                opContainer.innerHTML = '';
+
+                if (monthRecords.length === 0) {
+                     opContainer.innerHTML = '<div class="text-center text-xs text-slate-400 py-4">本月目前尚無資料</div>';
+                } else {
+                    // 2. 將當月資料依照 OP 人員分組累加
+                    const opStats = {};
+                    monthRecords.forEach(rec => {
+                        const op = rec.opName;
+                        if (!opStats[op]) opStats[op] = { total: 0, defect: 0 };
+                        opStats[op].total += parseInt(rec.totalQty) || 0;
+                        opStats[op].defect += parseInt(rec.defectQty) || 0;
+                    });
+
+                    // 3. 計算各自的不良率並轉為陣列
+                    const opArray = Object.keys(opStats).map(op => {
+                        const total = opStats[op].total;
+                        const defect = opStats[op].defect;
+                        const rate = total > 0 ? (defect / total) * 100 : 0;
+                        return { op, total, defect, rate };
+                    });
+
+                    // 4. 依照不良率由高到低降冪排序
+                    opArray.sort((a, b) => b.rate - a.rate);
+
+                    // 5. 渲染各人員的卡片列
+                    opArray.forEach(stat => {
+                        let rateColor = 'text-emerald-600';
+                        let rateWeight = 'font-semibold';
+                        if (stat.rate > 5) { rateColor = 'text-rose-600'; rateWeight = 'font-bold'; }
+                        else if (stat.rate > 2) { rateColor = 'text-orange-500'; rateWeight = 'font-bold'; }
+
+                        const row = document.createElement('div');
+                        row.className = 'grid grid-cols-3 items-center bg-white p-2.5 rounded-lg shadow-sm border border-indigo-50';
+                        row.innerHTML = `
+                            <div class="flex items-center gap-2">
+                                <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-sm shadow-inner">${stat.op}</div>
+                            </div>
+                            <div class="text-center text-xs text-slate-500 leading-tight space-y-0.5">
+                                <div>總: <span class="font-medium text-slate-700">${stat.total}</span></div>
+                                <div>不: <span class="font-medium text-red-500">${stat.defect}</span></div>
+                            </div>
+                            <div class="text-right">
+                                <div class="${rateColor} ${rateWeight} text-base tracking-tight">${stat.rate.toFixed(2)}%</div>
+                            </div>
+                        `;
+                        opContainer.appendChild(row);
+                    });
+                }
+                summaryCard.classList.remove('hidden');
+            }
+
+            // --- 渲染下方歷史卡片列表 ---
+            records.forEach(rec => {
+                let badgeColor = 'bg-slate-100 text-slate-700';
+                if (rec.operationName.includes('OCA')) badgeColor = 'bg-blue-100 text-blue-700 border-blue-200';
+                else if (rec.operationName.includes('Panel')) badgeColor = 'bg-indigo-100 text-indigo-700 border-indigo-200';
+                else if (rec.operationName.includes('OCR')) badgeColor = 'bg-purple-100 text-purple-700 border-purple-200';
+
+                const card = document.createElement('div');
+                card.className = "bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col gap-2";
+                
+                const dateObj = new Date(rec.timestamp);
+                let timeStr = '未知時間';
+                if(!isNaN(dateObj.getTime())){
+                    timeStr = dateObj.toLocaleString('zh-TW', { month:'2-digit', day:'2-digit', hour: '2-digit', minute:'2-digit' });
+                }
+
+                const total = parseInt(rec.totalQty) || 0;
+                const defect = parseInt(rec.defectQty) || 0;
+                
+                let defectRate = rec.defectRate ? rec.defectRate : '0.00%';
+                let rateColor = 'text-green-600'; 
+                
+                if (total > 0) {
+                    const rateNum = (defect / total) * 100;
+                    if (!rec.defectRate) {
+                        defectRate = rateNum.toFixed(2) + '%';
+                    }
+                    if(rateNum > 5) rateColor = 'text-rose-600 font-bold';
+                    else if(rateNum > 2) rateColor = 'text-orange-500 font-bold';
+                }
+
+                card.innerHTML = `
+                    <div class="flex justify-between items-start border-b border-slate-50 pb-2">
+                        <div>
+                            <div class="text-lg font-bold text-slate-800">${rec.opName}</div>
+                            <div class="text-xs text-slate-400 mt-1 flex items-center gap-1">
+                                🕒 ${timeStr}
+                            </div>
+                        </div>
+                        <span class="text-xs font-semibold px-2 py-1 rounded-md border ${badgeColor}">
+                            ${rec.operationName}
+                        </span>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-x-2 gap-y-2 text-sm mt-1">
+                        <div class="text-slate-500">製令單: <span class="text-slate-800 font-medium">${rec.workOrder}</span></div>
+                        <div class="text-slate-500">總成品: <span class="text-slate-800 font-medium">${rec.productNum}</span></div>
+                        <div class="text-slate-500">尺寸: <span class="text-slate-800">${rec.size}</span></div>
+                        
+                        <div class="col-span-2 bg-slate-50 p-2 rounded-lg grid grid-cols-3 text-center mt-1">
+                            <div>
+                                <div class="text-xs text-slate-400">貼合總數</div>
+                                <div class="font-semibold text-blue-600">${total}</div>
+                            </div>
+                            <div class="border-l border-slate-200">
+                                <div class="text-xs text-slate-400">不良數量</div>
+                                <div class="font-semibold text-red-500">${defect}</div>
+                            </div>
+                            <div class="border-l border-slate-200">
+                                <div class="text-xs text-slate-400">不良率</div>
+                                <div class="${rateColor}">${defectRate}</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-1 text-sm">
+                        <span class="font-semibold text-slate-700">不良原因:</span> <span class="text-slate-800">${rec.defectReason}</span>
+                        ${rec.remarks ? `<div class="mt-1 text-slate-500"><span class="font-semibold">備註:</span> ${rec.remarks}</div>` : ''}
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        // 搜尋邏輯：搜尋時，也會同步讓上方儀表板只統計「被搜尋到的人」的當月資料
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            const keyword = e.target.value.toLowerCase();
+            const filtered = allRecords.filter(rec => 
+                (rec.opName && rec.opName.toLowerCase().includes(keyword)) ||
+                (rec.workOrder && rec.workOrder.toLowerCase().includes(keyword)) ||
+                (rec.defectReason && rec.defectReason.toLowerCase().includes(keyword))
+            );
+            renderRecords(filtered);
+        });
+
+    </script>
+</body>
+</html>
