@@ -230,7 +230,7 @@
 
         const defectReasonsMap = {
             'OCA貼合(前段)': ['異物', '貼歪', '氣泡'],
-            'Panel貼合(後段)': ['異物', '貼歪', '破片'],
+            'Panel貼合(後段)': ['異物', '貼歪', '破片', '氣泡'],
             'OCR Bonding': ['Touch撞傷', 'Panel撞傷', '異物進入', '割傷', '氣泡']
         };
 
@@ -414,7 +414,14 @@
                     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                     body: JSON.stringify({ action: 'delete', data: { originalTimestamp: timestamp } })
                 });
-                const result = await response.json();
+                const text = await response.text();
+                let result;
+                try { 
+                    result = JSON.parse(text); 
+                } catch (e) { 
+                    throw new Error('權限錯誤，請確認 Apps Script 部署是否設為「所有人」'); 
+                }
+                
                 if (result.status === 'success') {
                     showToast('紀錄已成功刪除！');
                     fetchRecords(); // 重新整理畫面
@@ -422,7 +429,7 @@
                     showToast('刪除失敗：' + result.message, 'error');
                 }
             } catch (error) {
-                showToast('連線失敗，請檢查網路設定', 'error');
+                showToast(error.message || '連線失敗，請檢查網路設定', 'error');
             }
         }
 
@@ -490,7 +497,14 @@
                     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                     body: JSON.stringify(payload)
                 });
-                const result = await response.json();
+                const text = await response.text();
+                let result;
+                try { 
+                    result = JSON.parse(text); 
+                } catch (e) { 
+                    throw new Error('權限錯誤，請確認 Apps Script 部署是否設為「所有人」'); 
+                }
+                
                 if (result.status === 'success') {
                     showToast(currentEditTimestamp ? '紀錄更新成功！' : '紀錄新增成功！');
                     cancelEditMode(); // 清空表單並恢復新增模式
@@ -499,7 +513,7 @@
                     showToast('發生錯誤：' + result.message, 'error');
                 }
             } catch (error) {
-                showToast('連線失敗，請檢查網路', 'error');
+                showToast(error.message || '連線失敗，請檢查網路', 'error');
             } finally {
                 btn.disabled = false; btn.classList.remove('opacity-75', 'cursor-not-allowed');
                 btnText.textContent = currentEditTimestamp ? '💾 儲存修改' : '送出紀錄';
@@ -518,7 +532,14 @@
 
             try {
                 const response = await fetch(GAS_URL + '?action=getRecords');
-                const result = await response.json();
+                const text = await response.text();
+                let result;
+                try { 
+                    result = JSON.parse(text); 
+                } catch (e) { 
+                    throw new Error('權限錯誤，請確認 Apps Script 部署是否設為「所有人」'); 
+                }
+                
                 if (result.status === 'success') {
                     allRecords = result.data.reverse(); 
                     renderRecords(allRecords);
@@ -526,7 +547,7 @@
                     showToast('讀取失敗', 'error');
                 }
             } catch (error) {
-                showToast('讀取失敗，檢查網路', 'error');
+                showToast(error.message || '讀取失敗，檢查網路', 'error');
             } finally {
                 loader.classList.add('hidden');
             }
