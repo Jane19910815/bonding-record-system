@@ -162,9 +162,23 @@
 
     </main>
 
+    <!-- 自定義訊息提示框 (Toast) -->
     <div id="toast" class="fixed bottom-5 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full text-white font-medium text-sm shadow-lg transition-all duration-300 opacity-0 pointer-events-none z-50 flex items-center gap-2">
         <span id="toastIcon"></span>
         <span id="toastMsg"></span>
+    </div>
+
+    <!-- 新增不良原因的對話框 (Modal) -->
+    <div id="defectModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-[60] flex items-center justify-center transition-opacity">
+        <div class="bg-white p-5 rounded-xl shadow-lg w-11/12 max-w-sm transform transition-all">
+            <h3 class="text-lg font-bold text-slate-800 mb-1">新增不良原因</h3>
+            <p class="text-sm text-slate-500 mb-4" id="defectModalOpName"></p>
+            <input type="text" id="newDefectInput" placeholder="輸入新的不良原因 (例如：異物刮傷)" class="w-full px-4 py-3 rounded-lg bg-slate-50 border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all mb-4">
+            <div class="flex justify-end gap-2">
+                <button type="button" onclick="closeDefectModal()" class="px-4 py-2 bg-slate-100 text-slate-600 font-semibold rounded-lg hover:bg-slate-200 transition-colors">取消</button>
+                <button type="button" onclick="confirmNewDefect()" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors">確認新增</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -228,21 +242,102 @@
             document.getElementById('opSelect').value = ''; 
         }
 
+        // --- 不良原因選項與新增邏輯 ---
         const defectReasonsMap = {
-            'OCA貼合(前段)': ['異物', '貼歪', '氣泡'],
-            'Panel貼合(後段)': ['異物', '貼歪', '破片', '氣泡'],
-            'OCR Bonding': ['Touch撞傷', 'Panel撞傷', '異物進入', '割傷', '氣泡']
+            'OCA貼合(前段)': ['異物', '貼歪', '氣泡', '髒汙'],
+            'Panel貼合(後段)': ['異物', '貼歪', '破片', '氣泡', '髒汙'],
+            'OCR Bonding': ['Touch撞傷', 'Panel撞傷', '異物進入', '割傷', '氣泡', '髒汙']
         };
+
+        let currentDefectSelectTarget = null; // 紀錄觸發新增不良原因的是哪一個下拉選單
+
+        function handleDefectChange(selectElem) {
+            if (selectElem.value === 'ADD_NEW') {
+                const opName = document.getElementById('operationName').value;
+                if(!opName) {
+                    showToast('請先選擇作業名稱', 'error');
+                    selectElem.value = '';
+                    return;
+                }
+                currentDefectSelectTarget = selectElem;
+                document.getElementById('defectModalOpName').textContent = `針對作業：${opName}`;
+                document.getElementById('newDefectInput').value = '';
+                document.getElementById('defectModal').classList.remove('hidden');
+                document.getElementById('newDefectInput').focus();
+            }
+        }
+
+        function closeDefectModal() {
+            document.getElementById('defectModal').classList.add('hidden');
+            // 如果取消，把該下拉選單重置回未選擇狀態
+            if (currentDefectSelectTarget && currentDefectSelectTarget.value === 'ADD_NEW') {
+                currentDefectSelectTarget.value = ''; 
+            }
+            currentDefectSelectTarget = null;
+        }
+
+        function confirmNewDefect() {
+            const input = document.getElementById('newDefectInput');
+            const newReason = input.value.trim();
+            const opName = document.getElementById('operationName').value;
+
+            if (!newReason) {
+                showToast('請輸入不良原因', 'error');
+                return;
+            }
+
+            const storageKey = 'custom_defect_' + opName;
+            const customReasons = JSON.parse(localStorage.getItem(storageKey) || '[]');
+            const defaultReasons = defectReasonsMap[opName] || [];
+            
+            // 存入 LocalStorage
+            if (!defaultReasons.includes(newReason) && !customReasons.includes(newReason)) {
+                customReasons.push(newReason);
+                localStorage.setItem(storageKey, JSON.stringify(customReasons));
+            }
+
+            // 更新畫面上的所有不良原因下拉選單
+            document.querySelectorAll('.defect-name').forEach(select => {
+                const currentVal = select.value;
+                let optionsHtml = '<option value="" disabled selected>請選擇不良原因</option>';
+                const allReasons = [...new Set([...defaultReasons, ...customReasons])];
+                allReasons.forEach(r => optionsHtml += `<option value="${r}">${r}</option>`);
+                optionsHtml += '<option value="ADD_NEW" class="font-bold text-blue-600">➕ 新增不良原因...</option>';
+                
+                select.innerHTML = optionsHtml;
+                
+                // 如果是觸發的那個選單，自動選中剛剛新增的項目
+                if (select === currentDefectSelectTarget) {
+                    select.value = newReason;
+                } else if (currentVal && currentVal !== 'ADD_NEW') {
+                    select.value = currentVal;
+                }
+            });
+
+            closeDefectModal();
+            showToast('已新增不良原因：' + newReason);
+        }
+
+        // 綁定 Modal 輸入框的 Enter 鍵事件
+        document.getElementById('newDefectInput').addEventListener('keyup', function(e) {
+            if (e.key === 'Enter') confirmNewDefect();
+        });
+
 
         function handleOperationChange(keepExistingRows = false) {
             const container = document.getElementById('defectContainer');
             if(!keepExistingRows) container.innerHTML = ''; 
             
-            // 更新現有下拉選單的選項
+            // 更新現有下拉選單的選項 (包含自訂儲存的原因)
             const opName = document.getElementById('operationName').value;
             let optionsHtml = '<option value="" disabled selected>請選擇不良原因</option>';
             if (opName && defectReasonsMap[opName]) {
-                defectReasonsMap[opName].forEach(reason => optionsHtml += `<option value="${reason}">${reason}</option>`);
+                const storageKey = 'custom_defect_' + opName;
+                const customReasons = JSON.parse(localStorage.getItem(storageKey) || '[]');
+                const allReasons = [...new Set([...defectReasonsMap[opName], ...customReasons])];
+                
+                allReasons.forEach(reason => optionsHtml += `<option value="${reason}">${reason}</option>`);
+                optionsHtml += '<option value="ADD_NEW" class="font-bold text-blue-600">➕ 新增不良原因...</option>';
             } else {
                 optionsHtml = '<option value="" disabled selected>請先選擇作業名稱</option>';
             }
@@ -250,7 +345,7 @@
             document.querySelectorAll('.defect-name').forEach(select => {
                 const currentVal = select.value;
                 select.innerHTML = optionsHtml;
-                if(currentVal) select.value = currentVal;
+                if(currentVal && currentVal !== 'ADD_NEW') select.value = currentVal;
             });
 
             calculateDefectTotal();   
@@ -274,13 +369,18 @@
             
             let optionsHtml = '<option value="" disabled selected>請選擇不良原因</option>';
             if (opName && defectReasonsMap[opName]) {
-                defectReasonsMap[opName].forEach(reason => optionsHtml += `<option value="${reason}">${reason}</option>`);
+                const storageKey = 'custom_defect_' + opName;
+                const customReasons = JSON.parse(localStorage.getItem(storageKey) || '[]');
+                const allReasons = [...new Set([...defectReasonsMap[opName], ...customReasons])];
+                
+                allReasons.forEach(reason => optionsHtml += `<option value="${reason}">${reason}</option>`);
+                optionsHtml += '<option value="ADD_NEW" class="font-bold text-blue-600">➕ 新增不良原因...</option>';
             } else {
                 optionsHtml = '<option value="" disabled selected>請先選擇作業名稱</option>';
             }
 
             row.innerHTML = `
-                <select class="defect-name flex-1 px-3 py-2 rounded-lg bg-white border border-slate-200 focus:border-red-400 focus:ring-2 focus:ring-red-100 outline-none transition-all appearance-none">
+                <select onchange="handleDefectChange(this)" class="defect-name flex-1 px-3 py-2 rounded-lg bg-white border border-slate-200 focus:border-red-400 focus:ring-2 focus:ring-red-100 outline-none transition-all appearance-none">
                     ${optionsHtml}
                 </select>
                 <input type="number" min="1" class="defect-count w-24 px-3 py-2 rounded-lg bg-white border border-slate-200 focus:border-red-400 focus:ring-2 focus:ring-red-100 outline-none transition-all" placeholder="數量" oninput="calculateDefectTotal()">
@@ -367,6 +467,9 @@
             document.getElementById('totalQty').value = rec.totalQty;
             document.getElementById('remarks').value = rec.remarks || '';
 
+            // 確保作業名稱選定後，更新不良原因選單的快取項目
+            handleOperationChange(true);
+
             // 解析並填入不良原因
             document.getElementById('defectContainer').innerHTML = '';
             if (rec.defectReason && rec.defectReason !== '無') {
@@ -380,7 +483,6 @@
                 addDefectRow(); // 若原本全數良品，仍給一列空的
             }
             
-            handleOperationChange(true); // 更新選項狀態，但不清空內容
             calculateDefectTotal();
             
             document.getElementById('submitText').textContent = '💾 儲存修改';
